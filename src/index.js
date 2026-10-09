@@ -2,6 +2,7 @@ require('dotenv').config();
 const {
   Client,
   GatewayIntentBits,
+  Partials,
   Collection,
   ActivityType,
   Events
@@ -19,12 +20,20 @@ if (!token || token === 'your_bot_token_here') {
   process.exit(1);
 }
 
-// Инициализация Discord Client с необходимыми Intents
+// Инициализация Discord Client с расширенными Intents и Partials
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers, // Требует включения "Server Members Intent" в Developer Portal
-    GatewayIntentBits.GuildMessages
+    GatewayIntentBits.GuildMembers, // Требует "Server Members Intent" в Developer Portal
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent, // Требует "Message Content Intent" в Developer Portal
+    GatewayIntentBits.GuildVoiceStates, // Для отслеживания голосовых каналов
+    GatewayIntentBits.GuildModeration // Для отслеживания банов и действий модерации
+  ],
+  partials: [
+    Partials.Message,
+    Partials.Channel,
+    Partials.GuildMember
   ]
 });
 
@@ -77,6 +86,43 @@ function loadCommands(dir) {
 }
 
 loadCommands(commandsPath);
+
+/**
+ * Рекурсивная загрузка модулей событий из папки events
+ */
+const eventsPath = path.join(__dirname, 'events');
+
+function loadEvents(dir) {
+  if (!fs.existsSync(dir)) return;
+  const files = fs.readdirSync(dir, { withFileTypes: true });
+
+  for (const file of files) {
+    const fullPath = path.join(dir, file.name);
+    if (file.isDirectory()) {
+      loadEvents(fullPath);
+    } else if (file.name.endsWith('.js')) {
+      try {
+        const eventModule = require(fullPath);
+        const eventList = Array.isArray(eventModule) ? eventModule : [eventModule];
+
+        for (const event of eventList) {
+          if (event && event.name && typeof event.execute === 'function') {
+            if (event.once) {
+              client.once(event.name, (...args) => event.execute(...args));
+            } else {
+              client.on(event.name, (...args) => event.execute(...args));
+            }
+            console.log(`[Init] Загружено событие: ${event.name} (${file.name})`);
+          }
+        }
+      } catch (err) {
+        console.error(`[Init] Ошибка при загрузке события ${file.name}:`, err);
+      }
+    }
+  }
+}
+
+loadEvents(eventsPath);
 
 // Событие: готовность бота
 client.once(Events.ClientReady, async (c) => {

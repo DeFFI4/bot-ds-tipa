@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { hasModPermission, checkModerationHierarchy } = require('../../utils/permissions');
-const { logBan } = require('../../utils/logger');
+const { logBan, markBanLogged } = require('../../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -70,6 +70,7 @@ module.exports = {
     }
 
     try {
+      markBanLogged(targetUser.id);
       await interaction.guild.members.ban(targetUser.id, {
         deleteMessageSeconds: deleteDays * 24 * 60 * 60,
         reason: `${reason} | Модератор: ${interaction.user.tag}`
